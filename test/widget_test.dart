@@ -39,14 +39,22 @@ void calculate(List<StockModel> data) {
   var totalEffectivePurchase = 0.0;
   var totalQuantity = 0;
   var marketValue = 0.0;
+  var unrealizedGain = 0.0;
+  var capitalGain = 0.0;
+  var capitalGainTax = 0.0;
+  var realizedGain = 0.0;
+  var currentInvestment = 0.0;
+  var unrealizedPercent = 0.0;
   for (var stocks in data) {
     var quantity = stocks.quantity;
     var price = stocks.price;
-    if (stocks.transactionType == "Secondary") {
-      var sebonCommission = getCommission(quantity, price);
-      var brokerCommission = getBrokerCommission(quantity, price);
-      var dpCharge = 25;
-
+    if (stocks.transactionType == "Secondary" ||
+        stocks.transactionType == "IPO") {
+      var sebonCommission =
+          getCommission(quantity, price, stocks.transactionType);
+      var brokerCommission =
+          getBrokerCommission(quantity, price, stocks.transactionType);
+      var dpCharge = stocks.transactionType == "Secondary" ? 25 : 0;
       cost = (quantity! * price!).toDouble() +
           brokerCommission +
           sebonCommission +
@@ -54,26 +62,58 @@ void calculate(List<StockModel> data) {
       overallCost = overallCost + cost;
       var effectiveCost = cost / quantity;
       var weight = cost / overallCost;
-      totalEffectivePurchase =
-          totalEffectivePurchase + effectiveCost * quantity;
-      totalQuantity = totalQuantity + quantity;
-      var wacc = totalEffectivePurchase / totalQuantity;
-      var ltp = 1250;
-      marketValue = marketValue + ltp * quantity;
-      var unrealizedGain = marketValue - totalEffectivePurchase;
+      var ltp = 1231;
+
+      if (stocks.stockType != "SELL") {
+        marketValue = marketValue + ltp * quantity;
+        totalEffectivePurchase =
+            totalEffectivePurchase + effectiveCost * quantity;
+        totalQuantity = totalQuantity + quantity;
+        wacc = totalEffectivePurchase / totalQuantity;
+      } else {
+        totalEffectivePurchase = totalEffectivePurchase - (wacc * quantity);
+        totalQuantity = totalQuantity - quantity;
+        var totalWithWacc = wacc * quantity;
+        cost = (quantity * price).toDouble() -
+            (brokerCommission + sebonCommission);
+        marketValue = (ltp * totalQuantity).toDouble();
+        if (price > wacc) {
+          capitalGain = cost - totalWithWacc;
+          capitalGainTax = capitalGain * (7.5 / 100);
+        } else {
+          capitalGain = 0.0;
+          capitalGainTax = 0.0;
+        }
+        realizedGain = realizedGain +
+            ((quantity * price) -
+                (dpCharge + sebonCommission + brokerCommission)) -
+            (quantity * wacc) -
+            capitalGainTax;
+      }
+      unrealizedGain = marketValue - totalEffectivePurchase;
+      currentInvestment = marketValue - unrealizedGain;
+      unrealizedPercent = (unrealizedGain / currentInvestment) * 100;
       print(
-          "----------------------------------${stocks.stockType!.toUpperCase()} -----------------------------------------");
-      print(
-          "BrokerCommission ---> $brokerCommission || sebonCommission ----> $sebonCommission quantity -----> $quantity");
-      print("Market Value -----> $marketValue || "
-          "Effective Cost ----> $effectiveCost ||  weight ----> $weight || wacc ----> $wacc || UG-------> $unrealizedGain");
+          "----------------------------------------------------------${stocks.stockType!.toUpperCase()} -------------------------------------------------");
+      print("BrokerCommission ---> $brokerCommission || \n"
+          "sebonCommission ----> $sebonCommission || \n"
+          "Total Quantity -----> $totalQuantity \n");
+      print("Market Value -----> $marketValue || \n"
+          "Effective Cost ----> $effectiveCost || \n"
+          "Weight ----> $weight || \n"
+          "WACC----> $wacc || \n"
+          "UG-------> $unrealizedGain || \n"
+          "RG --------------> $realizedGain\n");
+      print("CAPITAL GAIN TAX ---> $capitalGainTax");
+      print("Current Investment ----------> $currentInvestment");
+      print("Unrealized Percent ----------> $unrealizedPercent %");
       print(
           "----------------------------------------------------------------------------------------------------------------------------------------------");
     }
   }
 }
 
-getBrokerCommission(int? quantity, num? price) {
+getBrokerCommission(int? quantity, num? price, String? transactionType) {
   var cost = (quantity! * price!).toDouble();
   var brokerCommissionRate;
   if (cost <= 50000) {
@@ -87,13 +127,17 @@ getBrokerCommission(int? quantity, num? price) {
   } else {
     brokerCommissionRate = 0.27 / 100;
   }
-  return (brokerCommissionRate * cost) < 10
-      ? 10
-      : (brokerCommissionRate * cost);
+  if (transactionType == "Secondary") {
+    return (brokerCommissionRate * cost) < 10
+        ? 10
+        : (brokerCommissionRate * cost);
+  } else {
+    return 0.0;
+  }
 }
 
-double getCommission(int? quantity, num? price) {
+double getCommission(int? quantity, num? price, String? transactionType) {
   var cost = (quantity! * price!).toDouble();
   var sebonComissionRate = 0.015 / 100;
-  return cost * sebonComissionRate;
+  return transactionType == "Secondary" ? cost * sebonComissionRate : 0.0;
 }
